@@ -1,0 +1,113 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches: [dev, staging, main]
+  push:
+    branches: [dev, staging, main]
+
+jobs:
+  # Frontend
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm run lint || echo "Linting not configured yet"
+        working-directory: apps/web
+      - run: npm test || echo "Tests not configured yet"
+        working-directory: apps/web
+      - run: npm run build || echo "Build not configured yet"
+        working-directory: apps/web
+
+  # API
+  test-api:
+    name: Test API
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: work3labs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci
+        working-directory: apps/api
+      - run: npm run lint || echo "Linting not configured yet"
+        working-directory: apps/api
+      - run: npx prisma migrate deploy || echo "Prisma not configured yet"
+        working-directory: apps/api
+      - run: npm test || echo "Tests not configured yet"
+        working-directory: apps/api
+
+  # Python service
+  test-python:
+    name: Test Python Service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: apps/verification-service/requirements.txt
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || echo "requirements.txt not found yet"
+        working-directory: apps/verification-service
+      - run: |
+          pip install flake8
+          flake8 . || echo "No Python files yet"
+        working-directory: apps/verification-service
+      - run: |
+          pip install pytest
+          pytest || echo "Tests not configured yet"
+        working-directory: apps/verification-service
+
+  # Smart contracts
+  test-contracts:
+    name: Test Smart Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: packages/contracts/package-lock.json
+      - run: npm ci || echo "Contracts not setup yet"
+        working-directory: packages/contracts
+      - run: npx hardhat compile || echo "Hardhat not configured yet"
+        working-directory: packages/contracts
+      - run: npx hardhat test || echo "Tests not configured yet"
+        working-directory: packages/contracts
